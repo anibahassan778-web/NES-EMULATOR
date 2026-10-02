@@ -78,6 +78,11 @@ class NesEmulator {
                 }
             }
 
+            // Mapper Scanline IRQ (e.g. MMC3)
+            if (cartridge?.irqState() == true) {
+                cpu.irq()
+            }
+
             // APU sound synthesis
             apu.step(cpuCycles)
         }

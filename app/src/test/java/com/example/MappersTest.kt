@@ -10,7 +10,9 @@ import org.junit.Test
  * - Mapper 1 (MMC1): Shift register, PRG banking, CHR banking, mirroring
  * - Mapper 2 (UxROM): Switchable $8000 bank, fixed $C000 bank, CHR RAM
  * - Mapper 3 (CNROM): Switchable CHR banks
- * - Cartridge loader supporting Mappers 0, 1, 2, 3
+ * - Mapper 4 (MMC3): 8KB PRG banks, 1KB/2KB CHR banks, Scanline IRQ counter
+ * - Mapper 7 (AxROM): 32KB PRG bank switching, single screen mirroring
+ * - Cartridge loader supporting Mappers 0, 1, 2, 3, 4, 7
  * NES emulator By ArDev
  */
 class MappersTest {
@@ -112,20 +114,97 @@ class MappersTest {
     }
 
     @Test
-    fun `test Cartridge parser supports Mappers 0, 1, 2, 3`() {
+    fun `test Mapper 4 MMC3 PRG banking and scanline IRQ counter`() {
+        val prgSize = 16 * 8192 // 128 KB (16 banks of 8KB: 0..15)
+        val prgRom = ByteArray(prgSize) { (it / 8192).toByte() }
+        val chrRom = ByteArray(64 * 1024) { (it / 1024).toByte() } // 64 banks of 1KB
+
+        val mapper4 = Mapper4(
+            prgRom = prgRom,
+            chrRom = chrRom,
+            mirroring = MirroringMode.VERTICAL,
+            prgBanks = 8,
+            isChrRam = false
+        )
+
+        // Select R6 (PRG bank at $8000)
+        mapper4.cpuWrite(0x8000, 0x06)
+        mapper4.cpuWrite(0x8001, 0x05) // Bank 5 at $8000
+        assertEquals(5, mapper4.cpuRead(0x8000))
+
+        // Last bank (15) is always fixed at $E000
+        assertEquals(15, mapper4.cpuRead(0xE000))
+
+        // Test PRG RAM ($6000-$7FFF)
+        mapper4.cpuWrite(0x6000, 0x42)
+        assertEquals(0x42, mapper4.cpuRead(0x6000))
+
+        // Test Scanline IRQ counter ($C000 latch, $C001 reload, $E001 enable)
+        mapper4.cpuWrite(0xC000, 0x03) // Latch = 3
+        mapper4.cpuWrite(0xC001, 0x00) // Reload = true
+        mapper4.cpuWrite(0xE001, 0x00) // Enable IRQ
+
+        assertFalse(mapper4.irqState())
+
+        mapper4.stepScanline() // Counter = 3
+        assertFalse(mapper4.irqState())
+
+        mapper4.stepScanline() // Counter = 2
+        assertFalse(mapper4.irqState())
+
+        mapper4.stepScanline() // Counter = 1
+        assertFalse(mapper4.irqState())
+
+        mapper4.stepScanline() // Counter = 0 -> IRQ Fired!
+        assertTrue(mapper4.irqState())
+
+        mapper4.clearIrq()
+        assertFalse(mapper4.irqState())
+    }
+
+    @Test
+    fun `test Mapper 7 AxROM 32KB PRG banking and single screen mirroring`() {
+        val prgSize = 4 * 32768 // 128 KB (4 banks of 32KB: 0..3)
+        val prgRom = ByteArray(prgSize) { (it / 32768).toByte() }
+        val chrRam = ByteArray(8192)
+
+        val mapper7 = Mapper7(
+            prgRom = prgRom,
+            chrRom = chrRam,
+            mirroring = MirroringMode.SINGLE_SCREEN_LOWER,
+            prgBanks = 8,
+            isChrRam = true
+        )
+
+        // Initial bank 0
+        assertEquals(0, mapper7.cpuRead(0x8000))
+
+        // Switch to bank 2 with single screen upper mirroring (bit 4 set: 0x12)
+        mapper7.cpuWrite(0x8000, 0x12)
+        assertEquals(2, mapper7.cpuRead(0x8000))
+        assertEquals(MirroringMode.SINGLE_SCREEN_UPPER, mapper7.mirroring)
+
+        // Switch to bank 3 with single screen lower mirroring (0x03)
+        mapper7.cpuWrite(0x8000, 0x03)
+        assertEquals(3, mapper7.cpuRead(0x8000))
+        assertEquals(MirroringMode.SINGLE_SCREEN_LOWER, mapper7.mirroring)
+    }
+
+    @Test
+    fun `test Cartridge parser supports Mappers 0, 1, 2, 3, 4, 7`() {
         fun makeRom(mapperId: Int): ByteArray {
             val header = ByteArray(16)
             header[0] = 0x4E.toByte() // N
             header[1] = 0x45.toByte() // E
             header[2] = 0x53.toByte() // S
             header[3] = 0x1A.toByte()
-            header[4] = 2 // 32 KB PRG
-            header[5] = 1 // 8 KB CHR
+            header[4] = 4 // 64 KB PRG
+            header[5] = 2 // 16 KB CHR
             header[6] = ((mapperId and 0x0F) shl 4).toByte()
             header[7] = (mapperId and 0xF0).toByte()
 
-            val prg = ByteArray(32768) { 0xEA.toByte() } // NOPs
-            val chr = ByteArray(8192) { 0x00 }
+            val prg = ByteArray(64 * 1024) { 0xEA.toByte() } // NOPs
+            val chr = ByteArray(16 * 1024) { 0x00 }
             return header + prg + chr
         }
 
@@ -148,5 +227,15 @@ class MappersTest {
         val cart3 = Cartridge.fromBytes(makeRom(3), "Test CNROM")
         assertEquals(3, cart3.mapperId)
         assertTrue(cart3.mapper is Mapper3)
+
+        // Test Mapper 4 (MMC3)
+        val cart4 = Cartridge.fromBytes(makeRom(4), "Test MMC3")
+        assertEquals(4, cart4.mapperId)
+        assertTrue(cart4.mapper is Mapper4)
+
+        // Test Mapper 7 (AxROM)
+        val cart7 = Cartridge.fromBytes(makeRom(7), "Test AxROM")
+        assertEquals(7, cart7.mapperId)
+        assertTrue(cart7.mapper is Mapper7)
     }
 }

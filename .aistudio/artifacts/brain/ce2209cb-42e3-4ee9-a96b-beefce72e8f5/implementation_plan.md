@@ -1,73 +1,84 @@
-# Save State Management System & Classic NES Retro Arcade Architecture
+# Vita3K UI Transformation Plan for "Nes Emulator ArDev"
 
-This plan transitions the emulator from the temporary PS4 theme to an **Authentic Classic NES Retro Arcade theme** (charcoal, crimson, gold, authentic NES controller) and introduces a robust, local-storage **Save State Management System** with multi-slot visual browsing, timestamps, screenshot previews, and slot management.
-
----
-
-## 1. Architectural Changes
-
-### A. Delete & Replace PS4 Theme
-- **Eliminate PS4 components**: Deprecate `com.example.nes.ui.ps4` (`Ps4Controls`, `Ps4Symbols`, `Ps4Wave`, `Ps4QuickMenu`).
-- **Retro Arcade Palette (`Theme.kt` & `Color.kt`)**:
-  - `NesCharcoal` (`#1A1A24`): Vintage console chassis dark base
-  - `NesConsoleGray` (`#383A48` / `#505364`): Classic NES front-loader brushed plastic
-  - `NesButtonRed` (`#D90429` / `#EF233C`): Iconic NES A / B controller button red
-  - `NesGold` (`#FFD166`): Retro cartridge seal and golden highlighting
-  - `NesRubberGray` (`#1F2022`): SELECT / START rubber pill buttons
-- **Authentic NES Virtual Controller**:
-  - Cross directional pad (D-Pad) with tactile central pivot
-  - Angled red A and B action buttons
-  - Dedicated rapid-fire Turbo A and Turbo B buttons
-  - Indented SELECT and START rubber pill buttons
-  - Quick Save, Quick Load, and State Manager shortcuts
-- **Classic Arcade Game Library**:
-  - Retro NES Cartridge shelf view with box art, mapper badge, and quick play
-  - Persistent watermark `NES emulator By ArDev`
+This plan faithfully implements the clean, modern Vita3K design shown in the user's screenshots, tailored specifically for **Nes Emulator ArDev**.
 
 ---
 
-## 2. Save State Management System with Local Storage
+## 1. Main Screen (Library Screen - Vita3K Style)
 
-### A. Room Database Integration & Persistence
-- **Entity (`SaveStateEntity`)**:
-  - `id`: Auto-generated Primary Key
-  - `romId`: Reference to target ROM
-  - `slotIndex`: Slot 1 to 10
-  - `slotName`: Name or label (e.g. "World 1-2 Boss", "Dungeon Entrance")
-  - `timestamp`: Epoch milliseconds for human-readable time ("2026-09-30 02:15 PM")
-  - `filePath`: Absolute path in `context.filesDir/savestates/` storing binary hardware snapshot
-  - `thumbnailBase64`: Captured RGB preview frame from PPU
-- **DAO (`SaveStateDao`)**:
-  - `getStatesForRom(romId: Long): Flow<List<SaveStateEntity>>`
-  - `getStateBySlot(romId: Long, slotIndex: Int): SaveStateEntity?`
-  - `insert(state: SaveStateEntity)`
-  - `delete(state: SaveStateEntity)`
-
-### B. State Manager Dialog UI (`SaveStateManagerDialog.kt`)
-- Accessible both in-game (via top toolbar or Pause) and from the library.
-- Multi-slot grid / list with:
-  - Mini snapshot preview / screenshot
-  - Slot number and timestamp
-  - **Save State** (captures CPU, PPU, APU, RAM, and Mapper state)
-  - **Load State** (restores emulator in-place within 1 frame)
-  - **Delete State** (with confirmation dialog)
-- Watermark displayed in header and footer: `NES emulator By ArDev`.
+Based on **Screenshot 1**:
+- **Header Bar**:
+  - Title: **Nes Emulator ArDev** in bold white typography.
+  - Subtitle: **v1.0.0 (Pro 60 FPS)** in muted gray.
+  - Action icons on the right: Search (🔍), Settings (⚙️), Filter/Sort (☰), and More (⋮).
+- **Game List Layout**:
+  - Clean OLED black background (`#0D0E12`).
+  - Square game icon with subtle rounded corners (`48x48 dp`).
+  - Game Title in bold white (`15sp`).
+  - Sub-row containing:
+    - Game ID / Mapper code (e.g., `NES-MMC3`, `NES-AXROM`, `NES-NROM`).
+    - Vita3K-style status badge:
+      - `[ Playable ]` (Green rounded pill `#2E7D32`)
+      - `[ Ingame ]` or `[ 60 FPS ]` (Amber/Orange rounded pill `#D97706`).
+- **Floating Action Button (FAB)**:
+  - Deep amber/orange circular button (`#D97706` / `#E65100`) at the bottom right with a white `+` icon to import `.nes` ROMs.
 
 ---
 
-## 3. Implementation Steps
+## 2. Settings Screen (Vita3K Style)
 
-1. **Database & Room Migration**:
-   - Add `SaveStateEntity` and `SaveStateDao` into Room Database (`NesDatabase.kt`).
-   - Add save/load/delete state operations in `NesRepository.kt` and `EmulatorViewModel.kt`.
-2. **Retro Theme & Controller**:
-   - Update `Color.kt` and `Theme.kt` with Classic NES Retro Arcade colors.
-   - Build `NesController.kt` (authentic NES D-Pad, A/B/Turbo, Select, Start).
-   - Build `SaveStateManagerDialog.kt` with multi-slot management, preview images, and delete actions.
-3. **Screen Updates**:
-   - Refactor `EmulatorScreen.kt` to use the authentic NES controller and state manager dialog.
-   - Refactor `LibraryScreen.kt` to classic NES cartridge shelf layout with state management access.
-   - Remove unused PS4 theme files from the project.
-4. **Verification**:
-   - Verify complete compilation via `compile_applet`.
-   - Run unit tests to ensure Mappers, CPU, and Save/Load serialization are 100% stable.
+Based on **Screenshot 2**:
+- **Header**:
+  - Back arrow (←), "Settings" in bold, Search (🔍), More (⋮).
+- **Horizontal Category Tabs**:
+  - Filter chips with icons: `Core`, `CPU`, `Graphics` (Active with amber highlight), `Audio`, `Controls`, `Save States`.
+- **Card-Based Settings Components**:
+  - Rounded dark cards (`#1B1D22`).
+  - Setting title, subtitle, and (ℹ️) info button.
+  - **Segmented Choice Pills**:
+    - Unselected: Dark gray pill (`#232630`) with white text.
+    - Selected: Active Vita3K Amber/Orange (`#D97706`) with bold text.
+    - Video Filters: `Nearest`, `Bilinear`, `CRT Scanlines`.
+    - Aspect Ratio: `Original (4:3)`, `Square (1:1)`, `Stretch`.
+    - Controller Size: `Compact`, `Standard`, `Large`.
+  - **Amber Switch Toggles**:
+    - Switches styled with amber/orange track and thumb.
+
+---
+
+## 3. In-Game Controller Overlay (Vita3K Minimalist White Outline)
+
+Based on **Screenshot 3**:
+- **Minimalist White Line Art Overlay**:
+  - Ultra-clean transparent overlay with crisp white 1.8dp outlines (adjustable opacity).
+- **Left Side**:
+  - Top: Rounded rectangle `[ L ]` button (Quick Load).
+  - Center: Sleek 4-way D-Pad outline with cross arrows and center diamond.
+  - Bottom Left: Circular analog-style ring / thumb-pad.
+  - Bottom Center-Left: Rounded pill `[ SELECT ]`.
+- **Right Side**:
+  - Top: Rounded rectangle `[ R ]` button (Quick Save).
+  - Action Cluster:
+    - Primary NES buttons: `[ B ]` and `[ A ]` in clean circular outlines.
+    - Turbo buttons: `[ TB ]` and `[ TA ]` for 30Hz rapid fire.
+  - Bottom Right: Circular analog-style ring.
+  - Bottom Center-Right: Rounded pill `[ START ]`.
+- **Center Controls**:
+  - Top: Circle `(F)` button (Fast-Forward 2x toggle).
+  - Bottom: Circle logo `(ArDev)` button to trigger the in-game Vita3K menu / save state drawer.
+
+---
+
+## 4. Execution Steps & Verification
+
+1. **Theme & Colors**:
+   - Define Vita3K color constants (`Vita3kDark`, `Vita3kCard`, `Vita3kAmber`, `Vita3kGreen`).
+2. **Library Screen**:
+   - Update `LibraryScreen.kt` to reproduce Screenshot 1 with "Nes Emulator ArDev" branding, mapper badges, and amber FAB.
+3. **Settings Screen**:
+   - Implement the tabbed category settings screen replicating Screenshot 2.
+4. **In-Game Overlay & Screen**:
+   - Update `VirtualController.kt` and `GameScreen.kt` to match the minimalist white outline style of Screenshot 3.
+5. **Verification**:
+   - Run `compile_applet` and unit tests (`gradle :app:testDebugUnitTest`).
+   - Rebuild and export `apks/NES_Emulator_By_ArDev_v1.0.apk`.

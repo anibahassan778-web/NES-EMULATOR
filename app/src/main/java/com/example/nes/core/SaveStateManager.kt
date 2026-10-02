@@ -35,6 +35,10 @@ class SaveStateManager(private val context: Context) {
         return File(getSavesDirectory(), "${safeKey}_slot${slot}.sav")
     }
 
+    fun getAllStates(): Flow<List<SaveStateEntity>> {
+        return dao.getAllStates()
+    }
+
     fun getStatesForRom(romKey: String): Flow<List<SaveStateEntity>> {
         return dao.getStatesForRom(romKey)
     }

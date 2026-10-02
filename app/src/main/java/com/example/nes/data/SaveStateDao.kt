@@ -11,6 +11,9 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface SaveStateDao {
 
+    @Query("SELECT * FROM save_states ORDER BY timestamp DESC")
+    fun getAllStates(): Flow<List<SaveStateEntity>>
+
     @Query("SELECT * FROM save_states WHERE romId = :romId ORDER BY slotIndex ASC")
     fun getStatesForRom(romId: String): Flow<List<SaveStateEntity>>
 

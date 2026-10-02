@@ -25,6 +25,10 @@ class Cartridge(
     fun ppuRead(address: Int): Int = mapper.ppuRead(address)
     fun ppuWrite(address: Int, value: Int): Boolean = mapper.ppuWrite(address, value)
 
+    fun stepScanline() = mapper.stepScanline()
+    fun irqState(): Boolean = mapper.irqState()
+    fun clearIrq() = mapper.clearIrq()
+
     companion object {
         @Throws(IllegalArgumentException::class)
         fun fromBytes(bytes: ByteArray, title: String = "Untitled ROM"): Cartridge {
@@ -130,7 +134,21 @@ class Cartridge(
                     prgBanks = prgBanks,
                     isChrRam = isChrRam
                 )
-                else -> throw IllegalArgumentException("Mapper $mapperId غير مدعوم حالياً (المدعوم: Mapper 0, 1, 2, 3).")
+                4 -> Mapper4(
+                    prgRom = prgRom,
+                    chrRom = chrRom,
+                    mirroring = mirroringMode,
+                    prgBanks = prgBanks,
+                    isChrRam = isChrRam
+                )
+                7 -> Mapper7(
+                    prgRom = prgRom,
+                    chrRom = chrRom,
+                    mirroring = mirroringMode,
+                    prgBanks = prgBanks,
+                    isChrRam = isChrRam
+                )
+                else -> throw IllegalArgumentException("Mapper $mapperId غير مدعوم حالياً (المدعوم: Mappers 0, 1, 2, 3, 4 MMC3, 7 AxROM).")
             }
 
             return Cartridge(

@@ -23,6 +23,10 @@ class Ppu2C02(private var cartridge: Cartridge?) {
     // 256-byte OAM (64 sprites * 4 bytes)
     val oam = ByteArray(256)
 
+    // Pre-allocated scanline pixel buffers (Zero allocation in hot loop)
+    private val scanlineBgPixels = IntArray(256)
+    private val scanlineBgPaletteIndices = IntArray(256)
+
     // PPU Registers
     var ppuCtrl: Int = 0
     var ppuMask: Int = 0
@@ -191,7 +195,7 @@ class Ppu2C02(private var cartridge: Cartridge?) {
     private fun mapPaletteAddress(addr: Int): Int {
         var pal = addr and 0x1F
         // Addresses 0x10, 0x14, 0x18, 0x1C mirror to 0x00, 0x04, 0x08, 0x0C
-        if (pal in intArrayOf(0x10, 0x14, 0x18, 0x1C)) {
+        if (pal == 0x10 || pal == 0x14 || pal == 0x18 || pal == 0x1C) {
             pal -= 0x10
         }
         return pal
@@ -227,6 +231,13 @@ class Ppu2C02(private var cartridge: Cartridge?) {
         if (scanline in 0..239) {
             if (cycle == 256) {
                 renderScanline(scanline)
+            }
+            if (cycle == 260) {
+                val showBg = (ppuMask and 0x08) != 0
+                val showSprites = (ppuMask and 0x10) != 0
+                if (showBg || showSprites) {
+                    cartridge?.stepScanline()
+                }
             }
         }
 
@@ -276,8 +287,7 @@ class Ppu2C02(private var cartridge: Cartridge?) {
         val universalBgIndex = paletteRam[0].toInt() and 0x3F
         val defaultBgColor = NES_PALETTE[universalBgIndex]
 
-        val bgPixels = IntArray(256) { 0 }
-        val bgPaletteIndices = IntArray(256) { 0 }
+        scanlineBgPaletteIndices.fill(0)
 
         // Render Background Scanline
         if (showBg) {
@@ -324,14 +334,15 @@ class Ppu2C02(private var cartridge: Cartridge?) {
                 val attrShift = ((tileY and 0x02) shl 1) or (tileX and 0x02)
                 val paletteGroup = (attrByte shr attrShift) and 0x03
 
-                bgPaletteIndices[x] = pixelColorIndex
-                if (pixelColorIndex != 0) {
+                scanlineBgPaletteIndices[x] = pixelColorIndex
+                val color = if (pixelColorIndex != 0) {
                     val palEntry = paletteRam[(paletteGroup * 4) + pixelColorIndex].toInt() and 0x3F
-                    bgPixels[x] = NES_PALETTE[palEntry]
+                    NES_PALETTE[palEntry]
                 } else {
-                    bgPixels[x] = defaultBgColor
+                    defaultBgColor
                 }
-                frameBuffer[y * 256 + x] = bgPixels[x]
+                scanlineBgPixels[x] = color
+                frameBuffer[y * 256 + x] = color
             }
         } else {
             for (x in 0..255) {
@@ -387,13 +398,13 @@ class Ppu2C02(private var cartridge: Cartridge?) {
                         if (colorIdx != 0) {
                             // Sprite 0 Hit detection
                             if (i == 0 && showBg && (ppuStatus and 0x40) == 0 && px < 255) {
-                                if (bgPaletteIndices[px] != 0) {
+                                if (scanlineBgPaletteIndices[px] != 0) {
                                     ppuStatus = ppuStatus or 0x40 // Set Sprite 0 Hit
                                 }
                             }
 
                             // Render sprite pixel if in front or background is transparent
-                            if (!priority || bgPaletteIndices[px] == 0) {
+                            if (!priority || scanlineBgPaletteIndices[px] == 0) {
                                 val palEntry = paletteRam[(paletteGroup * 4) + colorIdx].toInt() and 0x3F
                                 frameBuffer[y * 256 + px] = NES_PALETTE[palEntry]
                             }

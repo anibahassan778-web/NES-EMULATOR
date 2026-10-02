@@ -41,3 +41,14 @@ val NesRubberPillBorder = Color(0xFF3E414E)
 val NesTextPrimary = Color(0xFFF8F9FA)
 val NesTextSecondary = Color(0xFFA0A4B8)
 val NesTextMuted = Color(0xFF6C7285)
+
+// Vita3K Pro Aesthetic Palette
+val Vita3kDark = Color(0xFF0C0D11)
+val Vita3kCard = Color(0xFF181A22)
+val Vita3kCardBorder = Color(0xFF262936)
+val Vita3kAmber = Color(0xFFF57C00)
+val Vita3kAmberDark = Color(0xFFD97706)
+val Vita3kPillInactive = Color(0xFF222530)
+val Vita3kGreen = Color(0xFF2E7D32)
+val Vita3kIngameOrange = Color(0xFFD97706)
+

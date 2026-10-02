@@ -267,6 +267,26 @@ class EmulatorViewModel(application: Application) : AndroidViewModel(application
         return true
     }
 
+    val allSaveStates = saveStateManager.getAllStates()
+
+    fun deleteSaveState(state: com.example.nes.data.SaveStateEntity) {
+        viewModelScope.launch(Dispatchers.IO) {
+            saveStateManager.delete(state.romId, state.slotIndex)
+            withContext(Dispatchers.Main) {
+                showMessage("تم حذف الحفظ خانة ${state.slotIndex}")
+            }
+        }
+    }
+
+    fun launchRomWithSlot(romId: String, slot: Int) {
+        val targetRom = _games.value.find { it.id == romId } ?: return
+        launchRom(targetRom)
+        viewModelScope.launch {
+            kotlinx.coroutines.delay(200)
+            loadCurrentState(slot)
+        }
+    }
+
     override fun onCleared() {
         super.onCleared()
         emulator.release()

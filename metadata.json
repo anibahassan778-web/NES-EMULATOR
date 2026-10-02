@@ -1,6 +1,6 @@
 {
-  "name": "NES Emulator",
-  "description": "Full-featured NES emulator in pure Kotlin for Android 13 with CPU 6502, PPU, APU audio, Touch/Gamepad controls and Save States",
+  "name": "Nes Emulator ArDev",
+  "description": "NES emulator with Vita3K style UI, 60 FPS performance, white outline overlay, and multi-slot saves",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

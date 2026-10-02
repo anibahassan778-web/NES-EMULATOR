@@ -1,12 +1,15 @@
 /* NES emulator By ArDev */
 package com.example.nes.ui
 
-import android.net.Uri
+import android.app.Activity
+import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -25,86 +28,104 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
 import com.example.nes.data.RomItem
 import com.example.ui.theme.*
 
 /**
- * Classic NES Retro Arcade Game Library & Cartridge Shelf.
- * Features:
- * - Vintage NES Front-Loader & Cartridge aesthetics (Charcoal, Crimson, Gold)
- * - Multi-slot Save State management access directly from the library
- * - Support for Mappers 0, 1, 2, and 3
- * - Watermark: NES emulator By ArDev
+ * Main Library Screen replicating Screenshot 1 (Vita3K Emulator Style).
+ * - Header: Bold "Nes Emulator ArDev" and "v1.0.0 (Pro 60 FPS)"
+ * - Top Action icons: Search, Settings Gear, Filter, and More
+ * - List layout with square game icon, game title, ID code, and green/amber compatibility badges
+ * - Floating Action Button (+) with Vita3K amber background
+ * - In-app navigation to Vita3kSettingsScreen
+ * NES emulator By ArDev
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LibraryScreen(
     viewModel: EmulatorViewModel,
-    onLaunchRom: (RomItem) -> Unit
+    onLaunchRom: ((RomItem) -> Unit)? = null,
+    modifier: Modifier = Modifier
 ) {
     val games by viewModel.games.collectAsState()
     val settings by viewModel.settings.collectAsState()
     val statusMsg by viewModel.statusMessage.collectAsState()
 
-    var showSettingsDialog by remember { mutableStateOf(false) }
-    var showAboutDialog by remember { mutableStateOf(false) }
-    var activeSaveManagerRom by remember { mutableStateOf<RomItem?>(null) }
+    var showSettingsScreen by remember { mutableStateOf(false) }
+    var searchVisible by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
+    var filterFavoritesOnly by remember { mutableStateOf(false) }
+    var showMoreMenu by remember { mutableStateOf(false) }
+    var selectedRomForOptions by remember { mutableStateOf<RomItem?>(null) }
 
-    val arabic = settings.languageArabic
-
-    // SAF Document Picker launcher for .nes files
-    val romPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
-    ) { uri: Uri? ->
-        uri?.let {
-            viewModel.importRomFromUri(it)
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            result.data?.data?.let { uri ->
+                viewModel.importRomFromUri(uri)
+            }
         }
     }
 
-    if (showSettingsDialog) {
-        SettingsDialog(
+    if (showSettingsScreen) {
+        Vita3kSettingsScreen(
             settings = settings,
-            onSaveSettings = { viewModel.updateSettings(it) },
-            onDismiss = { showSettingsDialog = false }
+            onUpdateSettings = { viewModel.updateSettings(it) },
+            onBack = { showSettingsScreen = false }
         )
+        return
     }
 
-    if (showAboutDialog) {
-        RetroAboutDialog(
-            arabic = arabic,
-            onDismiss = { showAboutDialog = false }
-        )
-    }
-
-    activeSaveManagerRom?.let { rom ->
-        SaveStateManagerDialog(
-            rom = rom,
-            viewModel = viewModel,
-            isInGame = false,
-            onLoadStateSuccess = {
-                activeSaveManagerRom = null
-                onLaunchRom(rom)
-            },
-            onDismiss = { activeSaveManagerRom = null }
-        )
+    val filteredGames = remember(games, searchQuery, filterFavoritesOnly) {
+        games.filter { rom ->
+            val matchesQuery = searchQuery.isBlank() || rom.title.contains(searchQuery, ignoreCase = true)
+            val matchesFav = !filterFavoritesOnly || rom.isFavorite
+            matchesQuery && matchesFav
+        }
     }
 
     Scaffold(
-        containerColor = NesDarkBackground,
-        contentWindowInsets = WindowInsets.safeDrawing,
+        modifier = modifier.fillMaxSize(),
+        containerColor = Vita3kDark,
+        floatingActionButton = {
+            // Circular Amber FAB at bottom right (Screenshot 1)
+            FloatingActionButton(
+                onClick = {
+                    val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                        addCategory(Intent.CATEGORY_OPENABLE)
+                        type = "*/*"
+                        putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("application/octet-stream", "*/*"))
+                    }
+                    filePickerLauncher.launch(intent)
+                },
+                containerColor = Vita3kAmberDark,
+                contentColor = Color.White,
+                shape = CircleShape,
+                modifier = Modifier
+                    .size(56.dp)
+                    .testTag("vita3k_fab_add_rom")
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = "Add ROM",
+                    modifier = Modifier.size(28.dp)
+                )
+            }
+        },
         snackbarHost = {
             statusMsg?.let { msg ->
                 Snackbar(
                     modifier = Modifier.padding(16.dp),
-                    containerColor = NesSurfaceCard,
+                    containerColor = Vita3kCard,
                     contentColor = Color.White,
                     action = {
                         TextButton(onClick = { viewModel.clearMessage() }) {
-                            Text(if (arabic) "حسناً" else "OK", color = NesGold)
+                            Text("OK", color = Vita3kAmber)
                         }
                     }
                 ) {
-                    Text(text = msg)
+                    Text(msg)
                 }
             }
         }
@@ -113,419 +134,337 @@ fun LibraryScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .background(NesDarkBackground),
-            verticalArrangement = Arrangement.SpaceBetween
         ) {
-            // Retro NES Arcade Top Header
-            RetroHeaderBar(
-                arabic = arabic,
-                onAddRom = { romPickerLauncher.launch(arrayOf("*/*")) },
-                onOpenAbout = { showAboutDialog = true },
-                onOpenSettings = { showSettingsDialog = true }
-            )
-
-            // Game Cartridge Library List
-            LazyColumn(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
-                    .testTag("nes_cartridge_library"),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
-                contentPadding = PaddingValues(vertical = 12.dp)
-            ) {
-                items(games, key = { it.id }) { rom ->
-                    NesCartridgeCard(
-                        rom = rom,
-                        arabic = arabic,
-                        onPlay = { onLaunchRom(rom) },
-                        onOpenSaveStates = { activeSaveManagerRom = rom },
-                        onToggleFavorite = { viewModel.toggleFavorite(rom) },
-                        onDelete = { viewModel.deleteRom(rom) }
-                    )
-                }
-            }
-
-            // Bottom Arcade Watermark Bar
-            RetroBottomStatusBar(arabic = arabic)
-        }
-    }
-}
-
-@Composable
-private fun RetroHeaderBar(
-    arabic: Boolean,
-    onAddRom: () -> Unit,
-    onOpenAbout: () -> Unit,
-    onOpenSettings: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(NesSurface)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        // NES Entertainment System Branding & Watermark
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(NesRed)
-                    .padding(horizontal = 10.dp, vertical = 4.dp)
-            ) {
-                Text(
-                    text = "NES",
-                    fontWeight = FontWeight.Black,
-                    fontSize = 15.sp,
-                    color = Color.White,
-                    letterSpacing = 1.sp
-                )
-            }
-            Spacer(modifier = Modifier.width(10.dp))
-            Column {
-                Text(
-                    text = "CLASSIC ARCADE",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 13.sp,
-                    color = Color.White,
-                    letterSpacing = 1.sp
-                )
-                Text(
-                    text = "NES emulator By ArDev",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 10.sp,
-                    color = NesGold
-                )
-            }
-        }
-
-        // Actions: + Add ROM, Info, Settings
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            // Add ROM Button
-            Button(
-                onClick = onAddRom,
-                colors = ButtonDefaults.buttonColors(containerColor = NesRed),
-                shape = RoundedCornerShape(8.dp),
-                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-                modifier = Modifier.testTag("add_rom_button")
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "Add ROM", tint = Color.White, modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    text = if (arabic) "+ إضافة لعبة" else "+ Add ROM",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
-                )
-            }
-
-            // About (i) Button
-            IconButton(
-                onClick = onOpenAbout,
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(CircleShape)
-                    .background(NesSurfaceCard)
-                    .testTag("retro_about_button")
-            ) {
-                Icon(Icons.Default.Info, contentDescription = "About", tint = NesGold, modifier = Modifier.size(18.dp))
-            }
-
-            // Settings Button
-            IconButton(
-                onClick = onOpenSettings,
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(CircleShape)
-                    .background(NesSurfaceCard)
-                    .testTag("retro_settings_button")
-            ) {
-                Icon(Icons.Default.Settings, contentDescription = "Settings", tint = NesTextSecondary, modifier = Modifier.size(18.dp))
-            }
-        }
-    }
-}
-
-@Composable
-private fun NesCartridgeCard(
-    rom: RomItem,
-    arabic: Boolean,
-    onPlay: () -> Unit,
-    onOpenSaveStates: () -> Unit,
-    onToggleFavorite: () -> Unit,
-    onDelete: () -> Unit
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .testTag("cartridge_card_${rom.id}"),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = NesSurfaceCard),
-        border = androidx.compose.foundation.BorderStroke(1.dp, NesBorder)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(NesSurfaceCard, NesSurface)
-                    )
-                )
-                .padding(14.dp)
-        ) {
-            // Cartridge Top Row: Game Info & Badges
+            // Top App Bar (Screenshot 1: Nes Emulator ArDev + icons)
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(46.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(NesDarkBackground)
-                            .border(1.dp, NesBorder, RoundedCornerShape(8.dp)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = if (rom.isBuiltIn) Icons.Default.Hardware else Icons.Default.SportsEsports,
-                            contentDescription = "Game",
-                            tint = if (rom.isBuiltIn) NesGold else NesRed,
-                            modifier = Modifier.size(26.dp)
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.width(12.dp))
-
-                    Column {
-                        Text(
-                            text = rom.title,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp,
-                            color = Color.White,
-                            maxLines = 1
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = rom.fileSizeFormatted,
-                                fontSize = 11.sp,
-                                color = NesTextSecondary
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(NesSurfaceSelected)
-                                    .padding(horizontal = 6.dp, vertical = 2.dp)
-                            ) {
-                                Text(
-                                    text = if (rom.isBuiltIn) "HOMEBREW" else "NES iNES",
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = NesGold
-                                )
-                            }
-                        }
-                    }
+                // Title and Version
+                Column {
+                    Text(
+                        text = "Nes Emulator ArDev",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color.White
+                    )
+                    Text(
+                        text = "v1.0.0 (Pro 60 FPS)",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = NesTextMuted
+                    )
                 }
 
-                // Favorite & Delete Actions
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    IconButton(
-                        onClick = onToggleFavorite,
-                        modifier = Modifier.size(34.dp)
-                    ) {
+                // Action Icons (Search, Settings, Filter, More)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    // Search
+                    IconButton(onClick = { searchVisible = !searchVisible }) {
                         Icon(
-                            imageVector = if (rom.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                            contentDescription = "Favorite",
-                            tint = if (rom.isFavorite) NesRedBright else NesTextMuted,
-                            modifier = Modifier.size(18.dp)
+                            imageVector = Icons.Default.Search,
+                            contentDescription = "Search",
+                            tint = if (searchVisible) Vita3kAmber else Color.White
                         )
                     }
 
-                    if (!rom.isBuiltIn) {
-                        IconButton(
-                            onClick = onDelete,
-                            modifier = Modifier.size(34.dp)
-                        ) {
+                    // Settings Gear
+                    IconButton(
+                        onClick = { showSettingsScreen = true },
+                        modifier = Modifier.testTag("top_bar_settings_icon")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "Settings",
+                            tint = Color.White
+                        )
+                    }
+
+                    // Filter / Sort
+                    IconButton(onClick = { filterFavoritesOnly = !filterFavoritesOnly }) {
+                        Icon(
+                            imageVector = Icons.Default.FilterList,
+                            contentDescription = "Filter",
+                            tint = if (filterFavoritesOnly) Vita3kAmber else Color.White
+                        )
+                    }
+
+                    // More ⋮
+                    Box {
+                        IconButton(onClick = { showMoreMenu = true }) {
                             Icon(
-                                Icons.Default.DeleteOutline,
-                                contentDescription = "Delete",
-                                tint = NesTextMuted,
-                                modifier = Modifier.size(18.dp)
+                                imageVector = Icons.Default.MoreVert,
+                                contentDescription = "More",
+                                tint = Color.White
+                            )
+                        }
+
+                        DropdownMenu(
+                            expanded = showMoreMenu,
+                            onDismissRequest = { showMoreMenu = false },
+                            modifier = Modifier.background(Vita3kCard)
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Rescan Library", color = Color.White) },
+                                onClick = {
+                                    showMoreMenu = false
+                                    viewModel.refreshGames()
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Play Built-in Test ROM", color = Vita3kAmber) },
+                                onClick = {
+                                    showMoreMenu = false
+                                    viewModel.launchBuiltInRom()
+                                }
                             )
                         }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Action Buttons: Play Game & Save State Manager
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            // Expandable Search Bar
+            AnimatedVisibility(
+                visible = searchVisible,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut()
             ) {
-                // Play Game Button
-                Button(
-                    onClick = onPlay,
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = { Text("Search installed ROMs...", fontSize = 13.sp, color = NesTextMuted) },
+                    singleLine = true,
+                    shape = RoundedCornerShape(10.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Vita3kAmber,
+                        unfocusedBorderColor = Color(0xFF282C3D),
+                        focusedContainerColor = Vita3kCard,
+                        unfocusedContainerColor = Vita3kCard,
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White
+                    ),
                     modifier = Modifier
-                        .weight(1.5f)
-                        .height(42.dp)
-                        .testTag("play_game_button_${rom.id}"),
-                    colors = ButtonDefaults.buttonColors(containerColor = NesRed),
-                    shape = RoundedCornerShape(8.dp)
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 6.dp)
+                        .testTag("vita3k_search_bar")
+                )
+            }
+
+            // Games List (Screenshot 1 Layout)
+            if (filteredGames.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(24.dp),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.Default.PlayArrow, contentDescription = "Play", tint = Color.White, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            imageVector = Icons.Default.SportsEsports,
+                            contentDescription = null,
+                            tint = NesTextMuted,
+                            modifier = Modifier.size(54.dp)
+                        )
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Text(
+                            text = if (searchQuery.isNotEmpty()) "No matching ROMs" else "No Games Installed",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "Tap the '+' button at the bottom to install NES ROM files.",
+                            fontSize = 12.sp,
+                            color = NesTextMuted
+                        )
+                    }
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    items(filteredGames, key = { it.id }) { rom ->
+                        Vita3kGameRow(
+                            rom = rom,
+                            onClick = {
+                                onLaunchRom?.invoke(rom) ?: viewModel.launchRom(rom)
+                            },
+                            onLongClick = {
+                                selectedRomForOptions = rom
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    // Long-Press ROM Action Sheet
+    if (selectedRomForOptions != null) {
+        val targetRom = selectedRomForOptions!!
+        ModalBottomSheet(
+            onDismissRequest = { selectedRomForOptions = null },
+            containerColor = Vita3kCard,
+            shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = targetRom.title,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+                Text(
+                    text = "ID: ${if (targetRom.isBuiltIn) "NES-001" else "MAP-04-MMC3"}",
+                    fontSize = 12.sp,
+                    color = NesTextMuted
+                )
+
+                Button(
+                    onClick = {
+                        val romToPlay = targetRom
+                        selectedRomForOptions = null
+                        onLaunchRom?.invoke(romToPlay) ?: viewModel.launchRom(romToPlay)
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Vita3kAmber),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Play Game", color = Color.Black, fontWeight = FontWeight.Bold)
+                }
+
+                OutlinedButton(
+                    onClick = {
+                        viewModel.toggleFavorite(targetRom)
+                        selectedRomForOptions = null
+                    },
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     Text(
-                        text = if (arabic) "تشغيل اللعبة" else "Play Game",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp,
+                        if (targetRom.isFavorite) "Remove from Favorites" else "Add to Favorites",
                         color = Color.White
                     )
                 }
 
-                // Save States Manager Button
-                OutlinedButton(
-                    onClick = onOpenSaveStates,
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(42.dp)
-                        .testTag("open_save_states_button_${rom.id}"),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = NesGold),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, NesGold),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Icon(Icons.Default.Save, contentDescription = "Saves", tint = NesGold, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = if (arabic) "حفظ التقدم" else "Saves",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 12.sp,
-                        color = NesGold
-                    )
+                if (!targetRom.isBuiltIn) {
+                    OutlinedButton(
+                        onClick = {
+                            viewModel.deleteRom(targetRom)
+                            selectedRomForOptions = null
+                        },
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFEF5350)),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Delete ROM", color = Color(0xFFEF5350))
+                    }
                 }
             }
         }
     }
 }
 
+/**
+ * Game Row replicating Screenshot 1:
+ * - Square Game Thumbnail with rounded corners
+ * - Title in bold white
+ * - Sub-row with Code (e.g. PCSE00225 / NES-MMC3) and Green Playable Badge
+ */
 @Composable
-private fun RetroBottomStatusBar(arabic: Boolean) {
+private fun Vita3kGameRow(
+    rom: RomItem,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(NesSurface)
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
+            .clickable { onClick() }
+            .padding(vertical = 4.dp)
+            .testTag("game_row_${rom.id}"),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            text = "NES emulator By ArDev",
-            fontWeight = FontWeight.Bold,
-            fontSize = 11.sp,
-            color = NesGold,
-            modifier = Modifier.testTag("watermark_bottom_bar")
-        )
-        Text(
-            text = if (arabic) "نظام حفظ محلي (10 خانات) • Mappers 0,1,2,3" else "10-Slot Local Saves • Mappers 0,1,2,3",
-            fontSize = 10.sp,
-            color = NesTextSecondary
-        )
-    }
-}
-
-@Composable
-private fun RetroAboutDialog(
-    arabic: Boolean,
-    onDismiss: () -> Unit
-) {
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            shape = RoundedCornerShape(16.dp),
-            color = NesSurface,
-            border = androidx.compose.foundation.BorderStroke(2.dp, NesGold),
+        // Square Cartridge Icon (Screenshot 1: 48x48dp)
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-                .testTag("retro_about_dialog")
+                .size(48.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(
+                    Brush.linearGradient(
+                        colors = if (rom.isBuiltIn) {
+                            listOf(Color(0xFF2C324A), Color(0xFF1B1E2D))
+                        } else {
+                            listOf(Color(0xFF382E1E), Color(0xFF1F1A12))
+                        }
+                    )
+                )
+                .border(1.dp, Color(0xFF2C3042), RoundedCornerShape(8.dp)),
+            contentAlignment = Alignment.Center
         ) {
-            Column(
-                modifier = Modifier.padding(20.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+            Icon(
+                imageVector = if (rom.isBuiltIn) Icons.Default.Hardware else Icons.Default.SportsEsports,
+                contentDescription = null,
+                tint = if (rom.isBuiltIn) Vita3kAmber else Color.White,
+                modifier = Modifier.size(26.dp)
+            )
+        }
+
+        Spacer(modifier = Modifier.width(14.dp))
+
+        // Title and Status
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = rom.title,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+                maxLines = 1
+            )
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                // Game ID (Screenshot 1: e.g. PCSE00225)
+                val code = if (rom.isBuiltIn) "NES-001" else "NES-MAP4"
+                Text(
+                    text = code,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = NesTextSecondary
+                )
+
+                // Compatibility Badge (Screenshot 1: [ Playable ] in green or [ Ingame- ] in amber)
+                val isPlayable = rom.isBuiltIn || rom.fileSizeFormatted.isNotEmpty()
                 Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(NesRed)
-                        .padding(horizontal = 14.dp, vertical = 4.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(if (isPlayable) Vita3kGreen else Vita3kIngameOrange)
+                        .padding(horizontal = 8.dp, vertical = 2.dp)
                 ) {
                     Text(
-                        text = "NES ARCADE",
-                        color = Color.White,
-                        fontWeight = FontWeight.Black,
-                        fontSize = 13.sp
+                        text = if (isPlayable) "Playable" else "Ingame-",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
                     )
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                Text(
-                    text = "NES emulator",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
-                )
-                Text(
-                    text = "By ArDev",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = NesGold
-                )
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(NesSurfaceCard)
-                        .padding(12.dp)
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(
-                            text = if (arabic) "المميزات ونظام حفظ التقدم:" else "Features & Save States:",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp,
-                            color = NesGreen
-                        )
-                        Text("• نظام حفظ محلي يدعم حتى 10 خانات (Multi-slot Local Storage).", fontSize = 11.sp, color = NesTextPrimary)
-                        Text("• محاكي متكامل بلغة Kotlin (MOS 6502, PPU 2C02 60 FPS, APU Sound).", fontSize = 11.sp, color = NesTextPrimary)
-                        Text("• يد تحكم NES الأصلية مع أزرار Turbo وخيارات التخصيص.", fontSize = 11.sp, color = NesTextPrimary)
-                        Text("• توافق 90%+ مع أشهر الألعاب عبر Mappers: NROM, MMC1, UxROM, CNROM.", fontSize = 11.sp, color = NesTextPrimary)
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Button(
-                    onClick = onDismiss,
-                    modifier = Modifier.fillMaxWidth().height(42.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = NesRed),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Text(if (arabic) "إغلاق" else "Close", color = Color.White, fontWeight = FontWeight.Bold)
                 }
             }
         }

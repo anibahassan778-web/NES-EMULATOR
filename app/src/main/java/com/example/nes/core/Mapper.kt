@@ -1,3 +1,4 @@
+/* NES emulator By ArDev */
 package com.example.nes.core
 
 import java.io.DataInputStream
@@ -12,7 +13,8 @@ enum class MirroringMode {
 }
 
 /**
- * Interface for NES Cartridge Mappers (e.g. Mapper 0 / NROM, Mapper 1 / MMC1, etc.).
+ * Interface for NES Cartridge Mappers (NROM, MMC1, UxROM, CNROM, MMC3, AxROM).
+ * NES emulator By ArDev
  */
 interface Mapper {
     val mapperId: Int
@@ -41,6 +43,18 @@ interface Mapper {
      * Returns true if write was handled by the mapper.
      */
     fun ppuWrite(address: Int, value: Int): Boolean
+
+    /**
+     * Scanline clock for IRQ generation (MMC3, etc.).
+     */
+    fun stepScanline() {}
+
+    /**
+     * Returns true if an IRQ is pending from the mapper.
+     */
+    fun irqState(): Boolean = false
+
+    fun clearIrq() {}
 
     fun saveState(out: DataOutputStream) {}
     fun loadState(inp: DataInputStream) {}

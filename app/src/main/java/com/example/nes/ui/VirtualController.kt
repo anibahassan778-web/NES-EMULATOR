@@ -2,6 +2,7 @@
 package com.example.nes.ui
 
 import android.view.HapticFeedbackConstants
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -13,11 +14,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
@@ -28,10 +29,17 @@ import androidx.compose.ui.unit.sp
 import com.example.nes.core.Controller
 import com.example.nes.data.ControlSize
 import com.example.nes.data.EmulatorSettings
-import com.example.ui.theme.*
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
+import kotlin.math.atan2
+import kotlin.math.sqrt
 
+/**
+ * Minimalist Pure NES Virtual Controller.
+ * Uncluttered layout:
+ * - Left: Crisp D-Pad (Up, Down, Left, Right)
+ * - Right: Pure NES [ B ] and [ A ] circular action buttons
+ * - Bottom Center: Slanted [ SELECT ] and [ START ] rounded pills
+ * NES emulator By ArDev
+ */
 @Composable
 fun VirtualController(
     settings: EmulatorSettings,
@@ -40,6 +48,9 @@ fun VirtualController(
 ) {
     val view = LocalView.current
     val hapticEnabled = settings.hapticFeedback
+    val opacity = settings.controlsOpacity.coerceIn(0.2f, 1.0f)
+    val outlineColor = Color.White.copy(alpha = opacity)
+    val pressedFillColor = Color.White.copy(alpha = (opacity * 0.45f).coerceAtMost(0.6f))
 
     fun triggerHaptic() {
         if (hapticEnabled) {
@@ -47,316 +58,297 @@ fun VirtualController(
         }
     }
 
-    val dpadSize: Dp = when (settings.controlSize) {
-        ControlSize.SMALL -> 140.dp
-        ControlSize.NORMAL -> 170.dp
-        ControlSize.LARGE -> 200.dp
+    val baseScale = when (settings.controlSize) {
+        ControlSize.SMALL -> 0.85f
+        ControlSize.NORMAL -> 1.0f
+        ControlSize.LARGE -> 1.15f
     }
 
-    val actionButtonSize: Dp = when (settings.controlSize) {
-        ControlSize.SMALL -> 52.dp
-        ControlSize.NORMAL -> 64.dp
-        ControlSize.LARGE -> 74.dp
-    }
-
-    Row(
+    Box(
         modifier = modifier
             .fillMaxWidth()
-            .alpha(settings.controlsOpacity)
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .testTag("nes_pure_virtual_controller")
     ) {
-        // D-Pad
-        DpadControl(
-            size = dpadSize,
-            onDirectionChange = { up, down, left, right ->
-                onButtonChange(Controller.BUTTON_UP, up)
-                onButtonChange(Controller.BUTTON_DOWN, down)
-                onButtonChange(Controller.BUTTON_LEFT, left)
-                onButtonChange(Controller.BUTTON_RIGHT, right)
-            },
-            onHaptic = { triggerHaptic() }
-        )
+        Column(modifier = Modifier.fillMaxWidth()) {
+            // Main Controls Row: D-Pad (Left) <-----------------> [ B ] [ A ] (Right)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 6.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // LEFT: Minimalist Outline D-Pad
+                Vita3kDpad(
+                    outlineColor = outlineColor,
+                    pressedFill = pressedFillColor,
+                    size = 156.dp * baseScale,
+                    onButtonChange = { btn, pressed ->
+                        if (pressed) triggerHaptic()
+                        onButtonChange(btn, pressed)
+                    }
+                )
 
-        // Center Select & Start
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            RetroPillButton(
-                label = "SELECT",
-                testTag = "controller_select",
-                onPressChange = { pressed ->
-                    if (pressed) triggerHaptic()
-                    onButtonChange(Controller.BUTTON_SELECT, pressed)
-                }
-            )
-            RetroPillButton(
-                label = "START",
-                testTag = "controller_start",
-                onPressChange = { pressed ->
-                    if (pressed) triggerHaptic()
-                    onButtonChange(Controller.BUTTON_START, pressed)
-                }
-            )
+                // RIGHT: Pure NES Two-Button Cluster [ B ] and [ A ]
+                NesActionButtons(
+                    outlineColor = outlineColor,
+                    pressedFill = pressedFillColor,
+                    buttonSize = 64.dp * baseScale,
+                    onButtonChange = { btn, pressed ->
+                        if (pressed) triggerHaptic()
+                        onButtonChange(btn, pressed)
+                    }
+                )
+            }
+
+            // Bottom Center Row: [ SELECT ] and [ START ]
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp, bottom = 4.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinePillButton(
+                    label = "SELECT",
+                    outlineColor = outlineColor,
+                    pressedFill = pressedFillColor,
+                    width = 84.dp * baseScale,
+                    height = 32.dp * baseScale,
+                    fontSize = 11.sp,
+                    onPress = { pressed ->
+                        if (pressed) triggerHaptic()
+                        onButtonChange(Controller.BUTTON_SELECT, pressed)
+                    },
+                    modifier = Modifier.testTag("btn_select")
+                )
+
+                Spacer(modifier = Modifier.width(28.dp * baseScale))
+
+                OutlinePillButton(
+                    label = "START",
+                    outlineColor = outlineColor,
+                    pressedFill = pressedFillColor,
+                    width = 84.dp * baseScale,
+                    height = 32.dp * baseScale,
+                    fontSize = 11.sp,
+                    onPress = { pressed ->
+                        if (pressed) triggerHaptic()
+                        onButtonChange(Controller.BUTTON_START, pressed)
+                    },
+                    modifier = Modifier.testTag("btn_start")
+                )
+            }
         }
-
-        // Action Buttons (B & A) + Turbo
-        ActionButtonsDeck(
-            buttonSize = actionButtonSize,
-            onButtonChange = onButtonChange,
-            onHaptic = { triggerHaptic() }
-        )
     }
 }
 
+/**
+ * Pure NES 2-Button Action Cluster: [ B ] and [ A ]
+ * Diagonal offset matching authentic NES ergonomics.
+ */
 @Composable
-private fun DpadControl(
-    size: Dp,
-    onDirectionChange: (up: Boolean, down: Boolean, left: Boolean, right: Boolean) -> Unit,
-    onHaptic: () -> Unit
+private fun NesActionButtons(
+    outlineColor: Color,
+    pressedFill: Color,
+    buttonSize: Dp,
+    onButtonChange: (Int, Boolean) -> Unit
 ) {
-    var activeDir by remember { mutableStateOf("NONE") }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = Modifier.padding(end = 4.dp)
+    ) {
+        // [ B ] Button (Slightly lower)
+        Box(modifier = Modifier.padding(top = 18.dp)) {
+            NesCircleButton(
+                label = "B",
+                outlineColor = outlineColor,
+                pressedFill = pressedFill,
+                size = buttonSize,
+                onPress = { pressed ->
+                    onButtonChange(Controller.BUTTON_B, pressed)
+                },
+                modifier = Modifier.testTag("btn_b")
+            )
+        }
+
+        // [ A ] Button (Slightly higher)
+        Box(modifier = Modifier.padding(bottom = 18.dp)) {
+            NesCircleButton(
+                label = "A",
+                outlineColor = outlineColor,
+                pressedFill = pressedFill,
+                size = buttonSize,
+                onPress = { pressed ->
+                    onButtonChange(Controller.BUTTON_A, pressed)
+                },
+                modifier = Modifier.testTag("btn_a")
+            )
+        }
+    }
+}
+
+/**
+ * Minimalist Outline D-Pad with 4 directional wings, hollow arrowheads, and center diamond.
+ */
+@Composable
+private fun Vita3kDpad(
+    outlineColor: Color,
+    pressedFill: Color,
+    size: Dp,
+    onButtonChange: (Int, Boolean) -> Unit
+) {
+    var upPressed by remember { mutableStateOf(false) }
+    var downPressed by remember { mutableStateOf(false) }
+    var leftPressed by remember { mutableStateOf(false) }
+    var rightPressed by remember { mutableStateOf(false) }
+
+    fun updateTouch(offset: Offset, boxSize: Float, isDown: Boolean) {
+        if (!isDown) {
+            if (upPressed) { upPressed = false; onButtonChange(Controller.BUTTON_UP, false) }
+            if (downPressed) { downPressed = false; onButtonChange(Controller.BUTTON_DOWN, false) }
+            if (leftPressed) { leftPressed = false; onButtonChange(Controller.BUTTON_LEFT, false) }
+            if (rightPressed) { rightPressed = false; onButtonChange(Controller.BUTTON_RIGHT, false) }
+            return
+        }
+
+        val cx = boxSize / 2f
+        val cy = boxSize / 2f
+        val dx = offset.x - cx
+        val dy = offset.y - cy
+        val dist = sqrt(dx * dx + dy * dy)
+
+        val deadZone = boxSize * 0.10f
+        if (dist < deadZone) {
+            return
+        }
+
+        val angle = Math.toDegrees(atan2(dy.toDouble(), dx.toDouble())).let { if (it < 0) it + 360.0 else it }
+
+        // 8-way diagonal detection
+        val newRight = angle in 337.5..360.0 || angle in 0.0..22.5 || angle in 22.5..67.5 || angle in 292.5..337.5
+        val newDown = angle in 22.5..157.5
+        val newLeft = angle in 112.5..247.5
+        val newUp = angle in 202.5..337.5
+
+        if (newUp != upPressed) { upPressed = newUp; onButtonChange(Controller.BUTTON_UP, newUp) }
+        if (newDown != downPressed) { downPressed = newDown; onButtonChange(Controller.BUTTON_DOWN, newDown) }
+        if (newLeft != leftPressed) { leftPressed = newLeft; onButtonChange(Controller.BUTTON_LEFT, newLeft) }
+        if (newRight != rightPressed) { rightPressed = newRight; onButtonChange(Controller.BUTTON_RIGHT, newRight) }
+    }
 
     Box(
         modifier = Modifier
             .size(size)
-            .testTag("dpad_controller")
-            .pointerInput(Unit) {
-                fun processOffset(offset: Offset) {
-                    val half = size.toPx() / 2f
-                    val dx = offset.x - half
-                    val dy = offset.y - half
-                    val dist = kotlin.math.hypot(dx.toDouble(), dy.toDouble()).toFloat()
-
-                    if (dist < half * 0.18f || dist > half * 1.3f) {
-                        if (activeDir != "NONE") {
-                            activeDir = "NONE"
-                            onDirectionChange(false, false, false, false)
-                        }
-                        return
-                    }
-
-                    val angle = Math.toDegrees(kotlin.math.atan2(dy.toDouble(), dx.toDouble())).let {
-                        if (it < 0) it + 360.0 else it
-                    }
-
-                    // Angles: 0 = Right, 90 = Down, 180 = Left, 270 = Up
-                    val up = angle in 202.5..337.5
-                    val down = angle in 22.5..157.5
-                    val left = angle in 112.5..247.5
-                    val right = angle >= 292.5 || angle <= 67.5
-
-                    val newDir = "$up-$down-$left-$right"
-                    if (newDir != activeDir) {
-                        activeDir = newDir
-                        onHaptic()
-                        onDirectionChange(up, down, left, right)
-                    }
-                }
-
-                detectDragGestures(
-                    onDragStart = { processOffset(it) },
-                    onDrag = { change, _ ->
-                        change.consume()
-                        processOffset(change.position)
-                    },
-                    onDragEnd = {
-                        activeDir = "NONE"
-                        onDirectionChange(false, false, false, false)
-                    },
-                    onDragCancel = {
-                        activeDir = "NONE"
-                        onDirectionChange(false, false, false, false)
-                    }
-                )
-            }
             .pointerInput(Unit) {
                 detectTapGestures(
                     onPress = { offset ->
-                        val half = size.toPx() / 2f
-                        val dx = offset.x - half
-                        val dy = offset.y - half
-                        val angle = Math.toDegrees(kotlin.math.atan2(dy.toDouble(), dx.toDouble())).let {
-                            if (it < 0) it + 360.0 else it
-                        }
-                        val up = angle in 202.5..337.5
-                        val down = angle in 22.5..157.5
-                        val left = angle in 112.5..247.5
-                        val right = angle >= 292.5 || angle <= 67.5
-
-                        onHaptic()
-                        onDirectionChange(up, down, left, right)
+                        val boxSize = size.toPx()
+                        updateTouch(offset, boxSize, true)
                         tryAwaitRelease()
-                        onDirectionChange(false, false, false, false)
+                        updateTouch(Offset.Zero, boxSize, false)
+                    }
+                )
+            }
+            .pointerInput(Unit) {
+                detectDragGestures(
+                    onDragStart = { offset ->
+                        updateTouch(offset, size.toPx(), true)
+                    },
+                    onDrag = { change, _ ->
+                        updateTouch(change.position, size.toPx(), true)
+                    },
+                    onDragEnd = {
+                        updateTouch(Offset.Zero, size.toPx(), false)
+                    },
+                    onDragCancel = {
+                        updateTouch(Offset.Zero, size.toPx(), false)
                     }
                 )
             },
         contentAlignment = Alignment.Center
     ) {
-        // D-Pad Cross Background Shape
-        val crossThickness = size * 0.36f
-        Box(
-            modifier = Modifier
-                .width(crossThickness)
-                .fillMaxHeight()
-                .clip(RoundedCornerShape(6.dp))
-                .background(NesDpad)
-                .border(1.5.dp, NesBorder, RoundedCornerShape(6.dp))
-        )
-        Box(
-            modifier = Modifier
-                .height(crossThickness)
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(6.dp))
-                .background(NesDpad)
-                .border(1.5.dp, NesBorder, RoundedCornerShape(6.dp))
-        )
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val w = this.size.width
+            val h = this.size.height
+            val armW = w * 0.32f
+            val armL = (w - armW) / 2f
+            val strokeW = 2.2f
 
-        // Center Pivot
-        Box(
-            modifier = Modifier
-                .size(size * 0.28f)
-                .clip(CircleShape)
-                .background(NesSurfaceCard)
-        )
-
-        // Direction Indicators
-        Text("▲", color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp, modifier = Modifier.align(Alignment.TopCenter).padding(top = 4.dp))
-        Text("▼", color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp, modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 4.dp))
-        Text("◀", color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp, modifier = Modifier.align(Alignment.CenterStart).padding(start = 4.dp))
-        Text("▶", color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp, modifier = Modifier.align(Alignment.CenterEnd).padding(end = 4.dp))
-    }
-}
-
-@Composable
-private fun RetroPillButton(
-    label: String,
-    testTag: String,
-    onPressChange: (Boolean) -> Unit
-) {
-    var isPressed by remember { mutableStateOf(false) }
-
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier
-            .testTag(testTag)
-            .pointerInput(Unit) {
-                detectTapGestures(
-                    onPress = {
-                        isPressed = true
-                        onPressChange(true)
-                        tryAwaitRelease()
-                        isPressed = false
-                        onPressChange(false)
-                    }
-                )
+            // Draw Cross Outline
+            val path = Path().apply {
+                moveTo((w - armW) / 2f, 0f)
+                lineTo((w + armW) / 2f, 0f)
+                lineTo((w + armW) / 2f, armL)
+                lineTo(w, armL)
+                lineTo(w, (h + armW) / 2f)
+                lineTo((w + armW) / 2f, (h + armW) / 2f)
+                lineTo((w + armW) / 2f, h)
+                lineTo((w - armW) / 2f, h)
+                lineTo((w - armW) / 2f, (h + armW) / 2f)
+                lineTo(0f, (h + armW) / 2f)
+                lineTo(0f, armL)
+                lineTo((w - armW) / 2f, armL)
+                close()
             }
-    ) {
-        Box(
-            modifier = Modifier
-                .width(48.dp)
-                .height(14.dp)
-                .rotate(-20f)
-                .clip(RoundedCornerShape(8.dp))
-                .background(if (isPressed) NesRed else NesDpad)
-                .border(1.dp, NesBorder, RoundedCornerShape(8.dp))
-        )
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            text = label,
-            color = NesTextSecondary,
-            fontSize = 9.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 1.sp
-        )
-    }
-}
 
-@Composable
-private fun ActionButtonsDeck(
-    buttonSize: Dp,
-    onButtonChange: (Int, Boolean) -> Unit,
-    onHaptic: () -> Unit
-) {
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-        verticalAlignment = Alignment.Bottom,
-        modifier = Modifier.padding(bottom = 8.dp)
-    ) {
-        // B Button (Left, Lower)
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.offset(y = 12.dp)
-        ) {
-            TurboButton(
-                label = "TB",
-                testTag = "button_turbo_b",
-                onTurboPulse = { onButtonChange(Controller.BUTTON_B, it) },
-                onHaptic = onHaptic
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            RoundActionButton(
-                label = "B",
-                size = buttonSize,
-                testTag = "button_b",
-                onPressChange = { pressed ->
-                    if (pressed) onHaptic()
-                    onButtonChange(Controller.BUTTON_B, pressed)
-                }
-            )
-        }
+            drawPath(path, color = outlineColor, style = Stroke(width = strokeW))
 
-        // A Button (Right, Upper)
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.offset(y = (-8).dp)
-        ) {
-            TurboButton(
-                label = "TA",
-                testTag = "button_turbo_a",
-                onTurboPulse = { onButtonChange(Controller.BUTTON_A, it) },
-                onHaptic = onHaptic
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            RoundActionButton(
-                label = "A",
-                size = buttonSize,
-                testTag = "button_a",
-                onPressChange = { pressed ->
-                    if (pressed) onHaptic()
-                    onButtonChange(Controller.BUTTON_A, pressed)
-                }
-            )
+            // Highlight active wings
+            if (upPressed) {
+                drawRect(pressedFill, topLeft = Offset((w - armW) / 2f, 0f), size = androidx.compose.ui.geometry.Size(armW, armL))
+            }
+            if (downPressed) {
+                drawRect(pressedFill, topLeft = Offset((w - armW) / 2f, h - armL), size = androidx.compose.ui.geometry.Size(armW, armL))
+            }
+            if (leftPressed) {
+                drawRect(pressedFill, topLeft = Offset(0f, armL), size = androidx.compose.ui.geometry.Size(armL, armW))
+            }
+            if (rightPressed) {
+                drawRect(pressedFill, topLeft = Offset(w - armL, armL), size = androidx.compose.ui.geometry.Size(armL, armW))
+            }
+
+            // Center Diamond
+            val diamondSize = armW * 0.4f
+            val dPath = Path().apply {
+                moveTo(w / 2f, h / 2f - diamondSize)
+                lineTo(w / 2f + diamondSize, h / 2f)
+                lineTo(w / 2f, h / 2f + diamondSize)
+                lineTo(w / 2f - diamondSize, h / 2f)
+                close()
+            }
+            drawPath(dPath, color = outlineColor, style = Stroke(width = 1.6f))
         }
     }
 }
 
 @Composable
-private fun RoundActionButton(
+private fun NesCircleButton(
     label: String,
+    outlineColor: Color,
+    pressedFill: Color,
     size: Dp,
-    testTag: String,
-    onPressChange: (Boolean) -> Unit
+    onPress: (Boolean) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     var isPressed by remember { mutableStateOf(false) }
 
     Box(
-        modifier = Modifier
+        modifier = modifier
             .size(size)
-            .testTag(testTag)
             .clip(CircleShape)
-            .background(if (isPressed) NesRedDark else NesRed)
-            .border(2.dp, NesBorder, CircleShape)
+            .background(if (isPressed) pressedFill else Color.Transparent)
+            .border(2.0.dp, outlineColor, CircleShape)
             .pointerInput(Unit) {
                 detectTapGestures(
                     onPress = {
                         isPressed = true
-                        onPressChange(true)
+                        onPress(true)
                         tryAwaitRelease()
                         isPressed = false
-                        onPressChange(false)
+                        onPress(false)
                     }
                 )
             },
@@ -364,48 +356,40 @@ private fun RoundActionButton(
     ) {
         Text(
             text = label,
-            color = Color.White,
-            fontWeight = FontWeight.Black,
-            fontSize = (size.value * 0.42f).sp
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Bold,
+            color = outlineColor
         )
     }
 }
 
 @Composable
-private fun TurboButton(
+private fun OutlinePillButton(
     label: String,
-    testTag: String,
-    onTurboPulse: (Boolean) -> Unit,
-    onHaptic: () -> Unit
+    outlineColor: Color,
+    pressedFill: Color,
+    width: Dp,
+    height: Dp,
+    fontSize: androidx.compose.ui.unit.TextUnit = 12.sp,
+    onPress: (Boolean) -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    var isHolding by remember { mutableStateOf(false) }
-
-    LaunchedEffect(isHolding) {
-        if (isHolding) {
-            onHaptic()
-            while (isActive && isHolding) {
-                onTurboPulse(true)
-                delay(33) // ~30Hz turbo oscillation
-                onTurboPulse(false)
-                delay(33)
-            }
-            onTurboPulse(false)
-        }
-    }
+    var isPressed by remember { mutableStateOf(false) }
 
     Box(
-        modifier = Modifier
-            .size(34.dp)
-            .testTag(testTag)
-            .clip(CircleShape)
-            .background(if (isHolding) NesGold else NesSurfaceCard)
-            .border(1.dp, NesBorder, CircleShape)
+        modifier = modifier
+            .size(width = width, height = height)
+            .clip(RoundedCornerShape(height / 2f))
+            .background(if (isPressed) pressedFill else Color.Transparent)
+            .border(1.8.dp, outlineColor, RoundedCornerShape(height / 2f))
             .pointerInput(Unit) {
                 detectTapGestures(
                     onPress = {
-                        isHolding = true
+                        isPressed = true
+                        onPress(true)
                         tryAwaitRelease()
-                        isHolding = false
+                        isPressed = false
+                        onPress(false)
                     }
                 )
             },
@@ -413,9 +397,9 @@ private fun TurboButton(
     ) {
         Text(
             text = label,
-            color = if (isHolding) Color.Black else NesTextSecondary,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Bold
+            fontSize = fontSize,
+            fontWeight = FontWeight.Bold,
+            color = outlineColor
         )
     }
 }
